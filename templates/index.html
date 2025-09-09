@@ -1,0 +1,22 @@
+<!Doctype html>
+<title>File Uploader</title>
+<h1>Upload a CSV File</h1>
+<form method="post" enctype="multipart/form-data">
+  <input type="file" name="file">
+  <input type="submit" value="Upload and Analyze">
+</form>
+
+{% if alert %}
+<div class="alert">
+  <p><strong>Alert:</strong> {{ alert }}</p>
+</div>
+{% endif %}
+
+{% if results %}
+<div class="results">
+  <h2>Analysis Results</h2>
+  <p>Precision: {{ results['Precision'] }}</p>
+  <p>Recall: {{ results['Recall'] }}</p>
+  <p>AUROC: {{ results['AUROC'] }}</p>
+</div>
+{% endif %}
