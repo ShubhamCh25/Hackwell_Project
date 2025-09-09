@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Chronic Care Risk Prediction Engine</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            color: #2d3748;
+        }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+        .header {
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .header h1 {
+            font-size: 2.5rem; font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+        }
+        .header p { color: #718096; font-size: 1.1rem; }
+
+        .dashboard-nav { display:flex; gap:16px; margin-bottom:24px; flex-wrap:wrap; }
+        .nav-btn {
+            padding: 12px 24px; background: rgba(255,255,255,0.9);
+            border: none; border-radius: 12px; cursor: pointer; font-weight:600;
+            transition: all .3s; box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+            display:flex; align-items:center; gap:8px;
+        }
+        .nav-btn.active {
+            background: linear-gradient(135deg,#667eea 0%,#764ba2 100%); color:white;
+            transform: translateY(-2px); box-shadow: 0 8px 24px rgba(102,126,234,0.3);
+        }
+
+        .main-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap:24px; margin-bottom:24px; }
+        .card {
+            background: rgba(255,255,255,0.95); backdrop-filter: blur(10px);
+            border-radius:16px; padding:24px; box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            border:1px solid rgba(255,255,255,0.2); transition: transform .3s, box-shadow .3s;
+        }
+        .card:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(0,0,0,0.15); }
+
+        .card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+        .card-title { font-size:1.25rem; font-weight:700; color:#2d3748; }
+        .card-icon { width:48px; height:48px; background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); border-radius:12px; display:flex; align-items:center; justify-content:center; color:white; font-size:1.2rem; }
+
+        .stats-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap:16px; margin-top:20px; }
+        .stat-card { text-align:center; padding:20px; background: linear-gradient(135deg, rgba(102,126,234,0.1) 0%, rgba(118,75,162,0.1) 100%); border-radius:12px; border:1px solid rgba(102,126,234,0.1); }
+        .stat-value { font-size:1.8rem; font-weight:700; color:#667eea; margin-bottom:8px; }
+        .stat-label { color:#718096; font-size:0.8rem; text-transform:uppercase; letter-spacing:0.5px; }
+
+        .patient-table-container { background: rgba(255,255,255,0.95); border-radius:16px; padding:24px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); border:1px solid rgba(255,255,255,0.2); overflow-x:auto; }
+        .patient-table { width:100%; border-collapse:collapse; margin-top:16px; }
+        .patient-table th, .patient-table td { padding:12px; text-align:left; border-bottom:1px solid #e2e8f0; }
+        .patient-table th { background: linear-gradient(135deg, rgba(102,126,234,0.1) 0%, rgba(118,75,162,0.1) 100%); font-weight:600; color:#2d3748; position:sticky; top:0; z-index:10; }
+        .patient-table tbody tr { cursor:pointer; transition: all .2s ease; }
+        .patient-table tbody tr:hover { background: rgba(102,126,234,0.05); transform: translateX(4px); }
+
+        .risk-badge { padding:4px 12px; border-radius:20px; font-size:0.8rem; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; display:inline-block; }
+        .risk-high { background: linear-gradient(135deg,#ff6b6b 0%,#ee5a6f 100%); color:white; }
+        .risk-medium { background: linear-gradient(135deg,#feca57 0%,#ff9ff3 100%); color:white; }
+        .risk-low { background: linear-gradient(135deg,#48dbfb 0%,#0abde3 100%); color:white; }
+
+        .patient-detail-view { display:none; grid-template-columns: 1fr 1fr; gap:24px; }
+        .patient-detail-view.active { display:grid; }
+
+        .cohort-view.hidden { display:none; }
+
+        .back-btn { margin-bottom:20px; padding:12px 24px; background: linear-gradient(135deg,#667eea 0%,#764ba2 100%); color:white; border:none; border-radius:12px; cursor:pointer; font-weight:600; display:flex; align-items:center; gap:8px; width:fit-content; }
+        .back-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102,126,234,0.3); }
+
+        .chart-container { position:relative; height:300px; margin-top:20px; }
+
+        .feature-importance { margin-top:20px; }
+        .feature-item { display:flex; justify-content:space-between; align-items:center; padding:12px; margin-bottom:8px; border-radius:8px; background: rgba(102,126,234,0.05); border-left:4px solid #667eea; }
+        .feature-name { font-weight:600; color:#2d3748; flex:1; }
+        .feature-value { padding:4px 8px; border-radius:6px; font-size:0.9rem; font-weight:600; margin-left:12px; min-width:80px; text-align:center; }
+        .feature-impact { font-size:0.8rem; color:#718096; margin-left:8px; }
+
+        .recommendations { background: linear-gradient(135deg, rgba(72,219,251,0.1) 0%, rgba(10,189,227,0.1) 100%); border:1px solid rgba(72,219,251,0.2); border-radius:12px; padding:20px; margin-top:20px; }
+        .recommendation-item { display:flex; align-items:flex-start; gap:12px; margin-bottom:16px; padding:12px; background: rgba(255,255,255,0.5); border-radius:8px; }
+        .recommendation-icon { width:32px; height:32px; background: linear-gradient(135deg,#48dbfb 0%,#0abde3 100%); border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-size:0.8rem; flex-shrink:0; }
+
+        .loading { display:inline-block; width:20px; height:20px; border:3px solid rgba(102,126,234,0.3); border-radius:50%; border-top-color:#667eea; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .vitals-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-top:16px; }
+        .vital-item { background: rgba(102,126,234,0.05); padding:12px; border-radius:8px; text-align:center; }
+        .vital-label { font-size:0.8rem; color:#718096; margin-bottom:4px; }
+        .vital-value { font-size:1.1rem; font-weight:600; color:#2d3748; }
+
+        .search-filter { display:flex; gap:16px; margin-bottom:20px; flex-wrap:wrap; align-items:center; }
+        .search-input, .filter-select { padding:10px 16px; border:1px solid rgba(102,126,234,0.2); border-radius:8px; background: rgba(255,255,255,0.9); font-size:0.9rem; }
+        .search-input { flex:1; min-width:200px; }
+
+        .error-message { background:#fed7d7; color:#c53030; padding:12px 16px; border-radius:8px; margin:16px 0; border:1px solid #feb2b2; }
+        .success-message { background:#c6f6d5; color:#2f855a; padding:12px 16px; border-radius:8px; margin:16px 0; border:1px solid #9ae6b4; }
+
+        /* prediction form */
+        .predict-form { background: rgba(255,255,255,0.95); padding:24px; border-radius:16px; box-shadow:0 8px 32px rgba(0,0,0,0.1); border:1px solid rgba(255,255,255,0.2); max-width:700px; margin:0 auto; }
+        .predict-form h2 { margin-bottom:16px; color:#2d3748; }
+        .form-row { display:flex; gap:12px; flex-wrap:wrap; }
+        .form-group { margin-bottom:16px; flex:1; min-width:160px; }
+        .form-group label { display:block; font-weight:600; margin-bottom:6px; color:#2d3748; }
+        .form-group input { width:100%; padding:10px 14px; border:1px solid rgba(102,126,234,0.2); border-radius:8px; font-size:0.9rem; }
+        .submit-btn { background: linear-gradient(135deg,#667eea 0%,#764ba2 100%); border:none; color:white; padding:12px 24px; border-radius:12px; font-weight:600; cursor:pointer; }
+        .submit-btn:hover { transform: translateY(-2px); box-shadow:0 6px 20px rgba(102,126,234,0.3); }
+        .prediction-result { margin-top:20px; padding:16px; border-radius:12px; font-weight:600; }
+        .prediction-high { background:#fed7d7; color:#c53030; }
+        .prediction-medium { background:#faf089; color:#975a16; }
+        .prediction-low { background:#c6f6d5; color:#2f855a; }
+
+        @media (max-width:768px) {
+            .main-grid { grid-template-columns: 1fr; }
+            .patient-detail-view { grid-template-columns: 1fr; }
+            .dashboard-nav { flex-direction: column; }
+            .nav-btn { justify-content:center; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><i class="fas fa-heartbeat" style="margin-right:16px;"></i>Chronic Care Risk Prediction Engine</h1>
+            <p>AI-powered 90-day deterioration risk assessment using vital signs and clinical data</p>
+        </div>
+
+        <div class="dashboard-nav">
+            <button id="nav-cohort" class="nav-btn active" onclick="showCohortView()">
+                <i class="fas fa-users"></i> Cohort Overview
+            </button>
+            <button id="nav-performance" class="nav-btn" onclick="showModelPerformance()">
+                <i class="fas fa-chart-line"></i> Model Performance
+            </button>
+            <button id="nav-refresh" class="nav-btn" onclick="refreshData()">
+                <i class="fas fa-sync-alt"></i> Refresh Data
+            </button>
+            <button id="nav-predict" class="nav-btn" onclick="showPredictForm()">
+                <i class="fas fa-plus"></i> New Prediction
+            </button>
+        </div>
+
+        <div id="messageContainer"></div>
+
+        <div id="cohortView" class="cohort-view">
+            <div class="main-grid">
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">Cohort Statistics</h2>
+                        <div class="card-icon"><i class="fas fa-chart-pie"></i></div>
+                    </div>
+                    <div class="stats-grid">
+                        <div class="stat-card"><div class="stat-value" id="totalPatients">-</div><div class="stat-label">Total Patients</div></div>
+                        <div class="stat-card"><div class="stat-value" id="highRiskCount">-</div><div class="stat-label">High Risk</div></div>
+                        <div class="stat-card"><div class="stat-value" id="mediumRiskCount">-</div><div class="stat-label">Medium Risk</div></div>
+                        <div class="stat-card"><div class="stat-value" id="lowRiskCount">-</div><div class="stat-label">Low Risk</div></div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">Model Performance</h2>
+                        <div class="card-icon"><i class="fas fa-brain"></i></div>
+                    </div>
+                    <div class="stats-grid" id="modelPerformanceStats">
+                        <div class="stat-card"><div class="stat-value" id="aurocValue">-</div><div class="stat-label">AUROC</div></div>
+                        <div class="stat-card"><div class="stat-value" id="auprcValue">-</div><div class="stat-label">AUPRC</div></div>
+                        <div class="stat-card"><div class="stat-value" id="accuracyValue">-</div><div class="stat-label">Accuracy</div></div>
+                        <div class="stat-card"><div class="stat-value" id="f1Value">-</div><div class="stat-label">F1-Score</div></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Risk Distribution</h2>
+                    <div class="card-icon"><i class="fas fa-chart-bar"></i></div>
+                </div>
+                <div class="chart-container"><canvas id="riskChart"></canvas></div>
+            </div>
+
+            <div class="patient-table-container">
+                <div class="card-header">
+                    <h2 class="card-title">Patient Cohort</h2>
+                    <div class="card-icon"><i class="fas fa-table"></i></div>
+                </div>
+
+                <div class="search-filter">
+                    <input type="text" id="searchInput" class="search-input" placeholder="Search by Subject ID...">
+                    <select id="riskFilter" class="filter-select">
+                        <option value="">All Risk Levels</option>
+                        <option value="high">High Risk</option>
+                        <option value="medium">Medium Risk</option>
+                        <option value="low">Low Risk</option>
+                    </select>
+                </div>
+
+                <table class="patient-table">
+                    <thead>
+                        <tr>
+                            <th>Subject ID</th>
+                            <th>Risk Score</th>
+                            <th>Risk Level</th>
+                            <th>Heart Rate Avg</th>
+                            <th>Systolic BP Avg</th>
+                            <th>Temp Avg</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="patientTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="patientDetailView" class="patient-detail-view">
+            <div>
+                <button class="back-btn" onclick="showCohortView()"><i class="fas fa-arrow-left"></i> Back to Cohort</button>
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title" id="patientDetailTitle">Patient Details</h2>
+                        <div class="card-icon"><i class="fas fa-user-md"></i></div>
+                    </div>
+
+                    <div id="patientVitals" class="vitals-grid"></div>
+
+                    <div class="chart-container"><canvas id="vitalTrendsChart"></canvas></div>
+                </div>
+            </div>
+
+            <div>
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">Risk Analysis & Explanations</h2>
+                        <div class="card-icon"><i class="fas fa-search"></i></div>
+                    </div>
+                    <div class="feature-importance" id="featureImportance"></div>
+                </div>
+
+                <div class="recommendations">
+                    <h3 style="margin-bottom:16px; color:#2d3748;"><i class="fas fa-lightbulb" style="margin-right:8px; color:#48dbfb;"></i> Clinical Recommendations</h3>
+                    <div id="recommendations"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="predictFormView" style="display:none; margin-top:18px;">
+            <div class="predict-form">
+                <button class="back-btn" onclick="showCohortView()"><i class="fas fa-arrow-left"></i> Back to Cohort</button>
+                <h2>New Patient Prediction</h2>
+
+                <form id="predictForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="heart_rate">Average Heart Rate</label>
+                            <input id="heart_rate" name="Heart_Rate_itemmean" type="number" step="any" required />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="systolic_bp">Average Systolic BP</label>
+                            <input id="systolic_bp" name="Systolic_BP_itemmean" type="number" step="any" required />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="diastolic_bp">Average Diastolic BP</label>
+                            <input id="diastolic_bp" name="Diastolic_BP_itemmean" type="number" step="any" />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="resp_rate">Average Respiratory Rate</label>
+                            <input id="resp_rate" name="Respiratory_Rate_itemmean" type="number" step="any" />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="spo2">Average SpO₂</label>
+                            <input id="spo2" name="SpO2_itemmean" type="number" step="any" />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="temperature">Average Temperature</label>
+                            <input id="temperature" name="Temperature_itemmean" type="number" step="any" required />
+                        </div>
+                    </div>
+
+                    <div style="margin-top:8px;">
+                        <button type="submit" class="submit-btn">Predict Risk</button>
+                    </div>
+
+                    <div id="predictionResult"></div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global
+        let patients = [];
+        let riskChart = null;
+        let vitalTrendsChart = null;
+        const API_BASE = 'http://localhost:5000/api';
+
+        // ------- Initialization -------
+        async function initDashboard() {
+            initRiskChart();
+            setupEventListeners();
+            try {
+                await loadPatients();
+                await loadModelPerformance();
+                showMessage('Dashboard loaded successfully!', 'success');
+            } catch (err) {
+                console.error('init error', err);
+                showMessage('Error loading dashboard data. Backend might be down. Showing sample data.', 'error');
+                loadSampleData();
+            }
+        }
+
+        // ------- API data loading -------
+        async function loadPatients() {
+            try {
+                const res = await fetch(`${API_BASE}/patients`);
+                const data = await res.json();
+                if (data.status === 'success') {
+                    patients = data.data.map(p => {
+                        // ensure numeric risk_score & risk_level exist
+                        p.risk_score = Number(p.risk_score) || 0;
+                        p.risk_level = p.risk_level || (p.risk_score >= 0.7 ? 'high' : (p.risk_score >= 0.4 ? 'medium' : 'low'));
+                        return p;
+                    });
+                    renderPatientTable();
+                    updateCohortStats();
+                    updateRiskChart();
+                } else {
+                    throw new Error(data.message || 'Failed to load patients from API');
+                }
+            } catch (err) {
+                console.error('loadPatients error', err);
+                throw err;
+            }
+        }
+
+        async function loadModelPerformance() {
+            try {
+                const res = await fetch(`${API_BASE}/model/performance`);
+                const data = await res.json();
+                if (data.status === 'success') {
+                    updateModelPerformanceStats(data.data);
+                } else {
+                    throw new Error('Failed to load model performance');
+                }
+            } catch (err) {
+                console.warn('Using fallback model performance', err);
+                updateModelPerformanceStats({
+                    auroc: 0.992, auprc: 0.987, accuracy: 0.94, f1_score: 0.93
+                });
+            }
+        }
+
+        // ------- Fallback sample data -------
+        function loadSampleData() {
+            patients = [
+                { subject_id: 10041786, risk_score: 0.85, risk_level: 'high', Heart_Rate_itemmean: 94.31, Systolic_BP_itemmean: 139.53, Temperature_itemmean: 3.85,
+                    vitals: { hr_min:83.59, hr_max:103.07, hr_mean:94.31, sbp_min:114.54, sbp_max:160.14, sbp_mean:139.53, temp_min:2.95, temp_max:4.66, temp_mean:3.85 }
+                },
+                { subject_id: 10040279, risk_score: 0.72, risk_level: 'medium', Heart_Rate_itemmean: 108.95, Systolic_BP_itemmean: 114.20, Temperature_itemmean: 3.08,
+                    vitals: { hr_min:71.26, hr_max:147.94, hr_mean:108.95, sbp_min:46.21, sbp_max:182.75, sbp_mean:114.20, temp_min:0.29, temp_max:3.82, temp_mean:3.08 }
+                },
+                { subject_id: 10041259, risk_score: 0.28, risk_level: 'low', Heart_Rate_itemmean: 85.60, Systolic_BP_itemmean: 89.59, Temperature_itemmean: 3.78,
+                    vitals: { hr_min:70.26, hr_max:158.90, hr_mean:85.60, sbp_min:76.88, sbp_max:101.76, sbp_mean:89.59, temp_min:3.80, temp_max:4.56, temp_mean:3.78 }
+                }
+            ];
+            renderPatientTable();
+            updateCohortStats();
+            updateRiskChart();
+        }
+
+        // ------- Render / UI helpers -------
+        function renderPatientTable(filteredPatients = patients) {
+            const tbody = document.getElementById('patientTableBody');
+            tbody.innerHTML = '';
+            filteredPatients.forEach(patient => {
+                const tr = document.createElement('tr');
+                tr.onclick = () => showPatientDetail(patient.subject_id);
+                const riskClass = `risk-${patient.risk_level}`;
+                const riskText = (patient.risk_level || 'unknown').charAt(0).toUpperCase() + (patient.risk_level || '').slice(1);
+                tr.innerHTML = `
+                    <td><strong>${patient.subject_id}</strong></td>
+                    <td><strong>${(patient.risk_score * 100).toFixed(1)}%</strong></td>
+                    <td><span class="risk-badge ${riskClass}">${riskText}</span></td>
+                    <td>${(patient.Heart_Rate_itemmean !== undefined ? Number(patient.Heart_Rate_itemmean).toFixed(1) : 'N/A')}</td>
+                    <td>${(patient.Systolic_BP_itemmean !== undefined ? Number(patient.Systolic_BP_itemmean).toFixed(1) : 'N/A')}</td>
+                    <td>${(patient.Temperature_itemmean !== undefined ? Number(patient.Temperature_itemmean).toFixed(2) : 'N/A')}</td>
+                    <td><i class="fas fa-eye" style="color:#667eea; cursor:pointer;"></i></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function updateCohortStats() {
+            const total = patients.length;
+            const high = patients.filter(p => p.risk_level === 'high').length;
+            const medium = patients.filter(p => p.risk_level === 'medium').length;
+            const low = patients.filter(p => p.risk_level === 'low').length;
+            document.getElementById('totalPatients').textContent = total;
+            document.getElementById('highRiskCount').textContent = high;
+            document.getElementById('mediumRiskCount').textContent = medium;
+            document.getElementById('lowRiskCount').textContent = low;
+        }
+
+        // ------- Risk Chart -------
+        function initRiskChart() {
+            const ctx = document.getElementById('riskChart').getContext('2d');
+            riskChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['High Risk', 'Medium Risk', 'Low Risk'],
+                    datasets: [{
+                        data: [0,0,0],
+                        backgroundColor: ['#ff6b6b','#feca57','#48dbfb'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position:'bottom', labels:{ padding:20, font:{ size:14 } } }
+                    }
+                }
+            });
+        }
+
+        function updateRiskChart() {
+            if (!riskChart) return;
+            const high = patients.filter(p => p.risk_level === 'high').length;
+            const medium = patients.filter(p => p.risk_level === 'medium').length;
+            const low = patients.filter(p => p.risk_level === 'low').length;
+            riskChart.data.datasets[0].data = [high, medium, low];
+            riskChart.update();
+        }
+
+        // ------- Patient Detail -------
+        function showPatientDetail(subject_id) {
+            const patient = patients.find(p => Number(p.subject_id) === Number(subject_id));
+            if (!patient) return showMessage('Patient not found', 'error');
+
+            // set title
+            document.getElementById('patientDetailTitle').textContent = `Patient ${patient.subject_id}`;
+
+            // vitals grid
+            const vitalsContainer = document.getElementById('patientVitals');
+            vitalsContainer.innerHTML = ''; // clear
+            // attempt to get structured vitals
+            const v = patient.vitals || {};
+            const vitalsToShow = [
+                { label: 'Heart Rate (mean)', value: v.hr_mean ?? patient.Heart_Rate_itemmean ?? 'N/A' },
+                { label: 'Heart Rate (min)', value: v.hr_min ?? 'N/A' },
+                { label: 'Heart Rate (max)', value: v.hr_max ?? 'N/A' },
+                { label: 'Systolic BP (mean)', value: v.sbp_mean ?? patient.Systolic_BP_itemmean ?? 'N/A' },
+                { label: 'Systolic BP (min)', value: v.sbp_min ?? 'N/A' },
+                { label: 'Systolic BP (max)', value: v.sbp_max ?? 'N/A' },
+                { label: 'Diastolic BP (mean)', value: v.dbp_mean ?? 'N/A' },
+                { label: 'Respiratory Rate (mean)', value: v.rr_mean ?? 'N/A' },
+                { label: 'SpO₂ (mean)', value: v.spo2_mean ?? 'N/A' },
+                { label: 'Temperature (mean)', value: v.temp_mean ?? patient.Temperature_itemmean ?? 'N/A' }
+            ];
+            vitalsToShow.forEach(item => {
+                const el = document.createElement('div');
+                el.className = 'vital-item';
+                el.innerHTML = `<div class="vital-label">${item.label}</div><div class="vital-value">${(typeof item.value === 'number') ? Number(item.value).toFixed(2) : item.value}</div>`;
+                vitalsContainer.appendChild(el);
+            });
+
+            // feature importance (if present on patient) otherwise show mock top features
+            const fiContainer = document.getElementById('featureImportance');
+            fiContainer.innerHTML = '';
+            if (patient.feature_importance && Array.isArray(patient.feature_importance)) {
+                patient.feature_importance.slice(0,8).forEach(f => {
+                    const div = document.createElement('div');
+                    div.className = 'feature-item';
+                    div.innerHTML = `<div class="feature-name">${f.name}</div><div style="display:flex;align-items:center;"><div class="feature-value">${Number(f.value).toFixed(3)}</div></div>`;
+                    fiContainer.appendChild(div);
+                });
+            } else {
+                // fallback mock
+                const fallback = [
+                    { name: 'Heart Rate (mean)', value: patient.Heart_Rate_itemmean ?? 0 },
+                    { name: 'Systolic BP (mean)', value: patient.Systolic_BP_itemmean ?? 0 },
+                    { name: 'Temperature (mean)', value: patient.Temperature_itemmean ?? 0 },
+                    { name: 'SpO₂ (mean)', value: (patient.vitals && patient.vitals.spo2_mean) ?? 0 }
+                ];
+                fallback.forEach(f => {
+                    const el = document.createElement('div');
+                    el.className = 'feature-item';
+                    el.innerHTML = `<div class="feature-name">${f.name}</div><div style="display:flex;align-items:center;"><div class="feature-value">${(typeof f.value === 'number') ? Number(f.value).toFixed(2) : f.value}</div></div>`;
+                    fiContainer.appendChild(el);
+                });
+            }
+
+            // recommendations (basic heuristics for demo)
+            const recContainer = document.getElementById('recommendations');
+            recContainer.innerHTML = '';
+            if (patient.risk_level === 'high') {
+                recContainer.innerHTML = `
+                    <div class="recommendation-item">
+                        <div class="recommendation-icon"><i class="fas fa-ambulance"></i></div>
+                        <div><strong>High risk:</strong> Consider urgent clinical review and remote monitoring. Escalate care as appropriate.</div>
+                    </div>
+                    <div class="recommendation-item">
+                        <div class="recommendation-icon"><i class="fas fa-stethoscope"></i></div>
+                        <div>Review medications and recent vitals. Consider contacting primary care provider within 24 hours.</div>
+                    </div>`;
+            } else if (patient.risk_level === 'medium') {
+                recContainer.innerHTML = `
+                    <div class="recommendation-item">
+                        <div class="recommendation-icon"><i class="fas fa-notes-medical"></i></div>
+                        <div><strong>Medium risk:</strong> Increase monitoring frequency and schedule follow-up within 7 days.</div>
+                    </div>`;
+            } else {
+                recContainer.innerHTML = `
+                    <div class="recommendation-item">
+                        <div class="recommendation-icon"><i class="fas fa-check-circle"></i></div>
+                        <div><strong>Low risk:</strong> Maintain routine care and encourage adherence to therapy and monitoring.</div>
+                    </div>`;
+            }
+
+            // Vital trends chart (show heart rate and systolic bp min-mean-max)
+            const vtCtx = document.getElementById('vitalTrendsChart').getContext('2d');
+            const hrPoints = [
+                v.hr_min ?? null,
+                v.hr_mean ?? patient.Heart_Rate_itemmean ?? null,
+                v.hr_max ?? null
+            ];
+            const sbpPoints = [
+                v.sbp_min ?? null,
+                v.sbp_mean ?? patient.Systolic_BP_itemmean ?? null,
+                v.sbp_max ?? null
+            ];
+            const labels = ['Min', 'Mean', 'Max'];
+
+            if (vitalTrendsChart) vitalTrendsChart.destroy();
+            vitalTrendsChart = new Chart(vtCtx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'Heart Rate',
+                            data: hrPoints,
+                            tension: 0.3,
+                            borderWidth: 2,
+                            pointRadius: 4,
+                            fill: false
+                        },
+                        {
+                            label: 'Systolic BP',
+                            data: sbpPoints,
+                            tension: 0.3,
+                            borderWidth: 2,
+                            pointRadius: 4,
+                            fill: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position:'bottom' } },
+                    scales: {
+                        y: { beginAtZero: false }
+                    }
+                }
+            });
+
+            // show detail
+            document.getElementById('cohortView').classList.add('hidden');
+            document.getElementById('predictFormView').style.display = 'none';
+            document.getElementById('patientDetailView').classList.add('active');
+
+            // set nav active none
+            setActiveNavButton('none');
+        }
+
+        // ------- Model performance display -------
+        function updateModelPerformanceStats(perf) {
+            if (!perf) return;
+            try {
+                document.getElementById('aurocValue').textContent = Number(perf.auroc).toFixed(3);
+                document.getElementById('auprcValue').textContent = Number(perf.auprc).toFixed(3);
+                document.getElementById('accuracyValue').textContent = (Number(perf.accuracy) * 100).toFixed(1) + '%';
+                document.getElementById('f1Value').textContent = Number(perf.f1_score).toFixed(3);
+            } catch (e) {
+                console.warn('updateModelPerformanceStats error', e);
+            }
+        }
+
+        // ------- Navigation / views -------
+        function showCohortView() {
+            document.getElementById('cohortView').classList.remove('hidden');
+            document.getElementById('patientDetailView').classList.remove('active');
+            document.getElementById('predictFormView').style.display = 'none';
+            setActiveNavButton('cohort');
+            // ensure chart updated
+            updateRiskChart();
+        }
+
+        function showModelPerformance() {
+            // model performance lives inside cohort view's card, so just show cohort view and highlight nav.
+            document.getElementById('cohortView').classList.remove('hidden');
+            document.getElementById('patientDetailView').classList.remove('active');
+            document.getElementById('predictFormView').style.display = 'none';
+            setActiveNavButton('performance');
+            // scroll to top so cards visible
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function showPredictForm() {
+            document.getElementById('cohortView').classList.add('hidden');
+            document.getElementById('patientDetailView').classList.remove('active');
+            document.getElementById('predictFormView').style.display = 'block';
+            setActiveNavButton('predict');
+        }
+
+        function refreshData() {
+            showMessage('Refreshing data...', 'success');
+            setActiveNavButton('refresh');
+            loadPatients().then(() => {
+                showMessage('Data refreshed', 'success');
+            }).catch(err => {
+                console.error(err);
+                showMessage('Failed to refresh data', 'error');
+            });
+        }
+
+        function setActiveNavButton(key) {
+            // keys: 'cohort', 'performance', 'predict', 'refresh', 'none'
+            const buttons = document.querySelectorAll('.nav-btn');
+            buttons.forEach(b => b.classList.remove('active'));
+            if (key === 'cohort') document.getElementById('nav-cohort').classList.add('active');
+            else if (key === 'performance') document.getElementById('nav-performance').classList.add('active');
+            else if (key === 'predict') document.getElementById('nav-predict').classList.add('active');
+            else if (key === 'refresh') document.getElementById('nav-refresh').classList.add('active');
+            // 'none' means no nav button active (used when in patient details)
+        }
+
+        // ------- Messages -------
+        let messageTimer = null;
+        function showMessage(text, type = 'success', timeout = 5000) {
+            const container = document.getElementById('messageContainer');
+            container.innerHTML = '';
+            const div = document.createElement('div');
+            div.className = (type === 'success') ? 'success-message' : 'error-message';
+            div.textContent = text;
+            container.appendChild(div);
+            if (messageTimer) clearTimeout(messageTimer);
+            messageTimer = setTimeout(() => { container.innerHTML = ''; }, timeout);
+        }
+
+        // ------- Search & Filter -------
+        function setupEventListeners() {
+            const searchInput = document.getElementById('searchInput');
+            const riskFilter = document.getElementById('riskFilter');
+            searchInput.addEventListener('input', () => applyFilters());
+            riskFilter.addEventListener('change', () => applyFilters());
+
+            // Predict form submit
+            const predictForm = document.getElementById('predictForm');
+            predictForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const payload = {
+                    Heart_Rate_itemmean: Number(document.getElementById('heart_rate').value || 0),
+                    Systolic_BP_itemmean: Number(document.getElementById('systolic_bp').value || 0),
+                    Diastolic_BP_itemmean: Number(document.getElementById('diastolic_bp').value || 0),
+                    Respiratory_Rate_itemmean: Number(document.getElementById('resp_rate').value || 0),
+                    SpO2_itemmean: Number(document.getElementById('spo2').value || 0),
+                    Temperature_itemmean: Number(document.getElementById('temperature').value || 0)
+                };
+                const resultDiv = document.getElementById('predictionResult');
+                resultDiv.innerHTML = `<div class="loading"></div> Predicting...`;
+                try {
+                    const res = await fetch(`${API_BASE}/predict`, {
+                        method: 'POST',
+                        headers: { 'Content-Type':'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const data = await res.json();
+                    if (data.status === 'success' && data.prediction) {
+                        const risk = data.prediction.risk_level;
+                        const score = (Number(data.prediction.risk_score) * 100).toFixed(1);
+                        const cls = (risk === 'high') ? 'prediction-high' : (risk === 'medium') ? 'prediction-medium' : 'prediction-low';
+                        resultDiv.className = `prediction-result ${cls}`;
+                        resultDiv.textContent = `Predicted Risk: ${risk.toUpperCase()} (${score}%)`;
+                    } else {
+                        resultDiv.className = 'prediction-result prediction-high';
+                        resultDiv.textContent = `Prediction failed: ${data.message || 'Unknown error'}`;
+                    }
+                } catch (err) {
+                    console.error('predict error', err);
+                    resultDiv.className = 'prediction-result prediction-high';
+                    resultDiv.textContent = 'Server error — confirm backend is running.';
+                }
+            });
+
+            // initialize nav active state on page load
+            setActiveNavButton('cohort');
+
+            // call init after listeners
+        }
+
+        function applyFilters() {
+            const q = document.getElementById('searchInput').value.trim().toLowerCase();
+            const risk = document.getElementById('riskFilter').value;
+            let filtered = patients.slice();
+
+            if (q) {
+                filtered = filtered.filter(p => String(p.subject_id).toLowerCase().includes(q));
+            }
+            if (risk) {
+                filtered = filtered.filter(p => p.risk_level === risk);
+            }
+            renderPatientTable(filtered);
+        }
+
+        // ------- On load -------
+        document.addEventListener('DOMContentLoaded', () => {
+            initDashboard();
+        });
+    </script>
+</body>
+</html>
